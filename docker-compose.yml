@@ -1,0 +1,44 @@
+version: "3"
+services:
+  frontend-react:
+    image: dodosoya/docker-spa-template-frontend-react
+    container_name: docker-spa-template-frontend-react
+    build:
+      context: ./frontend-react
+      dockerfile: Dockerfile
+    volumes:
+      - ./frontend-react:/app
+      - /app/node_modules
+      
+  backend-node:
+    image: dodosoya/docker-spa-template-backend-node
+    container_name: docker-spa-template-backend-node
+    build:
+      context: ./backend-node
+      dockerfile: Dockerfile
+    environment:
+      - HOST=0.0.0.0
+    volumes:
+      - ./backend-node:/app
+      - /app/node_modules
+
+  backend-flask:
+    image: dodosoya/docker-spa-template-backend-flask
+    container_name: docker-spa-template-backend-flask
+    build:
+      context: ./backend-flask
+      dockerfile: Dockerfile
+    environment: 
+      - FLASK_APP=app.py
+      - FLASK_RUN_HOST=0.0.0.0
+    volumes:
+      - ./backend-flask:/app
+
+  reverse-proxy:
+    image: nginx:latest
+    container_name: docker-spa-template-reverse-proxy
+    depends_on:
+      - backend-node
+      - backend-flask
+    volumes:
+      - ./reverse-proxy/nginx.conf:/etc/nginx/conf.d/default.conf
