@@ -7,12 +7,12 @@ function App() {
   const [data2, setData2] = useState('');
 
   useEffect(() => {
-    fetch('node/api/message')
+    fetch('/node/api/message')
       .then(res => res.json())
       .then(data => {
         setData1(data.message);
       });
-    fetch('flask/api/message')
+    fetch('/flask/api/message')
       .then(res => res.json())
       .then(data => {
         setData2(data.message);

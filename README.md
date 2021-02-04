@@ -1,10 +1,10 @@
 docker-spa-template
 ===
-A docker compose template to develop a SPA web application using Node.js, Flask and React.
+A docker template to set up the development environment of a single-page application (SPA) using Node.js, Flask and React.
 * Node web API
 * Flask web API
-* Nginx reverse proxy
 * React application
+* Nginx reverse proxy
 
 # Set up development environment
 ## Node web API
@@ -20,7 +20,7 @@ $ mkdir ./backend-node && vi ./backend-node/package.json
   "author": "Ryan Hsieh",
   "main": "server.js",
   "scripts": {
-    "pro": "node server.js",
+    "prod": "node server.js",
     "dev": "nodemon server.js"
   },
   "dependencies": {
@@ -46,7 +46,7 @@ const app = express();
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT = process.env.PORT || 5000;
 
-app.get('/api/message', (req, res) => {
+app.get('/message', (req, res) => {
   res.json({ 'message': 'Hello, I am from node.' });
 });
 
@@ -85,8 +85,9 @@ $ mkdir ./backend-flask && vi ./backend-flask/requirements.txt
 ```
 ```
 flask
+gunicorn
 ```
-* Use [flask](https://github.com/pallets/flask) to launch a server 
+* Use [flask](https://github.com/pallets/flask)  and [gunicorn](https://gunicorn.org) to launch a server 
 
 ### Create flask server
 ```bash
@@ -100,7 +101,7 @@ app = Flask(__name__)
 HOST = '0.0.0.0'
 PORT = 5000
 
-@app.route('/api/message')
+@app.route('/message')
 def message():
   return jsonify({ 'message': 'Hello, I am from flask.' })
 
@@ -120,29 +121,15 @@ COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 EXPOSE 5001
 COPY . .
-CMD ["flask", "run"]
+# CMD ["flask", "run"]
 ```
 
-## Set up reverse proxy
-Use nginx as reverse proxy
+### Add .dockerignore
 ```bash
-$ mkdir ./reverse-proxy && vi ./reverse-proxy/nginx.conf
+$ vi ./backend-flask/.dockerignore
 ```
 ```
-server {
-  listen 8080;
-  server_name localhost;
-
-  location /node/ {
-    proxy_pass http://backend-node:5000/;
-    proxy_set_header Host $host;
-  }
-
-  location /flask/ {
-    proxy_pass http://backend-flask:5001/;
-    proxy_set_header Host $host;
-  }
-}
+__pycache__
 ```
 
 ## React application
@@ -165,12 +152,12 @@ function App() {
   const [data2, setData2] = useState('');
 
   useEffect(() => {
-    fetch('node/api/message')
+    fetch('/node/api/message')
       .then(res => res.json())
       .then(data => {
         setData1(data.message);
       });
-    fetch('flask/api/message')
+    fetch('/flask/api/message')
       .then(res => res.json())
       .then(data => {
         setData2(data.message);
@@ -201,12 +188,13 @@ export default App;
 * Call API from node and flask web API respectively
 
 ### Edit package.json
-Add proxy and start settings
+Add homepage, proxy and start settings
 ```bash
 $ vi ./frontend-react/package.json
 ```
 ```json
 {
+  "homepage": "http://localhost/app",
   "proxy" : "http://reverse-proxy:8080",
   "scripts": {
     "start": "CHOKIDAR_USEPOLLING=true react-scripts start",
@@ -226,7 +214,7 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 EXPOSE 3000
-CMD ["npm", "start"]
+# CMD ["npm", "start"]
 ```
 
 ### Add .dockerignore
@@ -234,7 +222,48 @@ CMD ["npm", "start"]
 $ vi ./frontend-react/.dockerignore
 ```
 ```
+build
 node_modules
+```
+
+## Set up reverse proxy
+Use nginx as reverse proxy
+```bash
+$ mkdir ./reverse-proxy && vi ./reverse-proxy/nginx.conf
+```
+```
+server {
+  listen 8080;
+  server_name localhost;
+  root /var/www;
+
+  location /app {
+    index index.html;
+    # Return index.html when url changes
+    try_files $uri /app/index.html;
+  }
+
+  # Cache image and css files for 31 days
+  location ~* /app.*\.(js|css|png|jpg)$ {
+    access_log off;
+    expires    31d;
+  }
+
+  # Do not cache html, xml, json files
+  location ~* /app.*\.(?:manifest|appcache|html?|xml|json)$ {
+    expires    -1;
+  }
+
+  location /node/api/ {
+    proxy_pass http://backend-node:5000/;
+    proxy_set_header Host $host;
+  }
+
+  location /flask/api/ {
+    proxy_pass http://backend-flask:5001/;
+    proxy_set_header Host $host;
+  }
+}
 ```
 
 ## Set up docker compose 
@@ -246,8 +275,8 @@ $ vi ./docker-compose.yml
 version: "3"
 services:
   frontend-react:
-    image: dodosoya/spa-demo-frontend-react
-    container_name: spa-demo-frontend-react
+    image: dodosoya/docker-spa-template-frontend-react
+    container_name: docker-spa-template-frontend-react
     build:
       context: ./frontend-react
       dockerfile: Dockerfile
@@ -256,8 +285,8 @@ services:
       - /app/node_modules
       
   backend-node:
-    image: dodosoya/spa-demo-backend-node
-    container_name: spa-demo-backend-node
+    image: dodosoya/docker-spa-template-backend-node
+    container_name: docker-spa-template-backend-node
     build:
       context: ./backend-node
       dockerfile: Dockerfile
@@ -268,8 +297,8 @@ services:
       - /app/node_modules
 
   backend-flask:
-    image: dodosoya/spa-demo-backend-flask
-    container_name: spa-demo-backend-flask
+    image: dodosoya/docker-spa-template-backend-flask
+    container_name: docker-spa-template-backend-flask
     build:
       context: ./backend-flask
       dockerfile: Dockerfile
@@ -281,15 +310,19 @@ services:
 
   reverse-proxy:
     image: nginx:latest
-    container_name: spa-demo-reverse-proxy
+    container_name: docker-spa-template-reverse-proxy
     depends_on:
+      - frontend-react
       - backend-node
       - backend-flask
+    ports:
+      - "8080:8080"
     volumes:
       - ./reverse-proxy/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./reverse-proxy/log:/var/log/nginx
 ```
 
-### Create docker-compose.override.yml (development)
+### Create docker-compose.override.yml (for development)
 ```bash
 $ vi ./docker-compose.override.yml
 ```
@@ -300,6 +333,7 @@ services:
     ports:
       - "3000:3000"
     command: "npm start"
+
   backend-node:
     environment:
       - NODE_ENV=development
@@ -307,24 +341,49 @@ services:
     ports:
       - "5000:5000"
     command: "npm run dev"
+
   backend-flask:
     environment: 
       - FLASK_ENV=development
       - FLASK_RUN_PORT=5001
     ports:
       - "5001:5001"
-    command: "flask run"
-  reverse-proxy:
-    ports:
-      - "8080:8080"
+    command: "gunicorn -w 2 -b 0.0.0.0:5001 app:app --reload"
 ```
 
-## Create and start containers
+### Create docker-compose.prod.yml (for production)
+```bash
+$ vi ./docker-compose.prod.yml
+```
+```yml
+version: "3"
+services:
+  frontend-react:
+    command: "npm run build"
+
+  backend-node:
+    environment:
+      - NODE_ENV=production
+    command: "npm run prod"
+
+  backend-flask:
+    environment: 
+      - FLASK_ENV=production
+    command: "gunicorn -w 2 -b 0.0.0.0:5001 app:app"
+
+  reverse-proxy:
+    volumes:
+      - ./frontend-react/build:/var/www/app
+```
+
+## Create and start containers in development mode
 ```
 $ docker-compose up
 ```
 
 ## Test 
+The web API and application will automatically restart when file changes
+
 ### Node web API
 Make API call
 ```
@@ -344,6 +403,7 @@ Make API call
 $ curl http://localhost:8080/flask/api/message
 $ curl http://localhost:5001/api/message
 ```
+
 return
 ```json
 {
@@ -352,4 +412,45 @@ return
 ```
 
 ### React application
-Open browser and go to http://localhost:3000
+Open browser and go to http://localhost:3000/app
+
+## Stop containers
+```
+$ docker-compose down
+```
+
+# Deploy
+## Create and start containers in production mode
+```
+$ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
+```
+
+## Test 
+### Node web API
+Make API call
+```
+$ curl http://localhost:8080/node/api/message
+```
+
+return
+```json
+{
+  "message": "Hello, I am from node."
+}
+```
+
+### Flask web API
+Make API call
+```
+$ curl http://localhost:8080/flask/api/message
+```
+
+return
+```json
+{
+  "message": "Hello, I am from flask."
+}
+```
+
+### React application
+Open browser and go to http://localhost:8080/app

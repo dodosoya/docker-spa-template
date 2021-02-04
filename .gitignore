@@ -1,2 +1,3 @@
 backend-flask/__pycache__
 frontend-react/.eslintcache
+reverse-proxy/log/

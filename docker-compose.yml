@@ -38,7 +38,11 @@ services:
     image: nginx:latest
     container_name: docker-spa-template-reverse-proxy
     depends_on:
+      - frontend-react
       - backend-node
       - backend-flask
+    ports:
+      - "8080:8080"
     volumes:
       - ./reverse-proxy/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./reverse-proxy/log:/var/log/nginx

@@ -4,6 +4,7 @@ services:
     ports:
       - "3000:3000"
     command: "npm start"
+
   backend-node:
     environment:
       - NODE_ENV=development
@@ -11,13 +12,12 @@ services:
     ports:
       - "5000:5000"
     command: "npm run dev"
+
   backend-flask:
     environment: 
       - FLASK_ENV=development
       - FLASK_RUN_PORT=5001
     ports:
       - "5001:5001"
-    command: "flask run"
-  reverse-proxy:
-    ports:
-      - "8080:8080"
+    command: "gunicorn -w 2 -b 0.0.0.0:5001 app:app --reload"
+    
